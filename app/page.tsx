@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useChat } from 'ai/react';
 import { exampleDocuments } from '@/lib/example-documents';
+import type { TextItem } from 'pdfjs-dist/types/src/display/api';
 
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -62,7 +63,7 @@ export default function Chat() {
                     for (let i = 1; i <= pdf.numPages; i++) {
                         const page = await pdf.getPage(i);
                         const pageText = await page.getTextContent();
-                        text += pageText.items.map(item => (item as any).str).join(' ');
+                        text += pageText.items.map((item: TextItem) => item.str).join(' ');
                     }
                     content = text;
                 } else {

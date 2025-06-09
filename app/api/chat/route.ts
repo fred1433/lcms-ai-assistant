@@ -20,6 +20,7 @@ You are "LabAssistant AI", an expert in troubleshooting Mass Spectrometry (LCMS)
 `;
 
 export async function POST(req: Request) {
+  console.log('--- API /api/chat called ---');
   const { messages, documents } = await req.json();
 
   // Create context from uploaded documents
