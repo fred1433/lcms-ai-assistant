@@ -22,9 +22,9 @@ const UserIcon = () => (
 );
 
 const exampleQuestions = [
-    "D'après les logs, quelle est la cause probable pour l'erreur P-21 sur la machine LCMS-001 ?",
-    "Que signifie une LED de statut qui clignote en orange sur le détecteur QDa ?",
-    "Quelle est la procédure de mise sous tension du détecteur ACQUITY QDa ?",
+    "According to the logs, what is the probable cause for error P-21 on the LCMS-001 machine?",
+    "What does a flashing orange status LED on the QDa detector mean?",
+    "What is the power-on procedure for the ACQUITY QDa detector?",
 ];
 
 type Document = { name: string; content: string };
@@ -65,7 +65,7 @@ export default function Chat() {
                 }
                 setUserDocs(prev => [...prev, { name: file.name, content }]);
             } catch (err) {
-                setError(`Erreur lors de l'analyse du fichier ${file.name}`);
+                setError(`Error while parsing file ${file.name}`);
             }
         }
         setIsParsing(false);
@@ -79,18 +79,18 @@ export default function Chat() {
                 <Card>
                     <CardHeader>
                         <CardTitle>Documents</CardTitle>
-                        <CardDescription>Consultez les exemples ou uploadez les vôtres.</CardDescription>
+                        <CardDescription>Review examples or upload your own.</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <h4 className="font-semibold text-slate-700 mb-2">Exemples pré-chargés</h4>
+                        <h4 className="font-semibold text-slate-700 mb-2">Pre-loaded Examples</h4>
                         <div className="space-y-2">
                             {exampleDocuments.map(doc => <div key={doc.name} className="text-base p-3 bg-slate-100 rounded-md truncate" title={doc.name}>{doc.name}</div>)}
                         </div>
                         <hr className="my-4" />
-                        <h4 className="font-semibold text-slate-700 mb-2">Uploadez vos documents</h4>
+                        <h4 className="font-semibold text-slate-700 mb-2">Upload Your Documents</h4>
                         <input type="file" id="file-upload" multiple onChange={handleFileChange} className="hidden" accept=".pdf,.txt,.csv" disabled={isParsing} />
                         <Button onClick={() => document.getElementById('file-upload')?.click()} disabled={isParsing} className="w-full">
-                            {isParsing ? 'Analyse en cours...' : 'Uploader (PDF, TXT, CSV)'}
+                            {isParsing ? 'Parsing...' : 'Upload (PDF, TXT, CSV)'}
                         </Button>
                         <div className="mt-2 space-y-2">
                             {userDocs.map(doc => <div key={doc.name} className="text-base p-3 bg-green-100 rounded-md truncate" title={doc.name}>{doc.name}</div>)}
@@ -99,8 +99,8 @@ export default function Chat() {
                 </Card>
                 <Card className="flex-grow">
                      <CardHeader>
-                        <CardTitle>Exemples de Questions</CardTitle>
-                        <CardDescription>Cliquez pour tester</CardDescription>
+                        <CardTitle>Example Questions</CardTitle>
+                        <CardDescription>Click one to try</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="space-y-3">
@@ -119,7 +119,7 @@ export default function Chat() {
                     <div className="space-y-6">
                         {messages.length === 0 && !isParsing && (
                              <div className="text-center text-slate-500 h-full flex items-center justify-center">
-                                {isParsing ? 'Analyse en cours...' : 'Les documents sont chargés. Posez une question pour commencer.'}
+                                {isParsing ? 'Parsing files...' : 'Documents are loaded. Ask a question to begin.'}
                              </div>
                         )}
                         {messages.map((m, index) => (
@@ -145,7 +145,7 @@ export default function Chat() {
                                     <AvatarFallback><BotIcon /></AvatarFallback>
                                 </Avatar>
                                 <div className="max-w-2xl p-4 rounded-lg shadow-sm bg-white">
-                                    <p className="text-base animate-pulse">LabAssistant AI est en train d'écrire...</p>
+                                    <p className="text-base animate-pulse">LabAssistant AI is typing...</p>
                                 </div>
                             </div>
                         )}
@@ -153,8 +153,8 @@ export default function Chat() {
                 </main>
                 <footer className="p-4 border-t border-slate-200 bg-white">
                     <form onSubmit={handleSubmit} className="flex gap-4">
-                        <Input value={input} onChange={handleInputChange} placeholder="Posez votre question technique..." disabled={isUiDisabled} />
-                        <Button type="submit" disabled={isUiDisabled || !input.trim()}>Envoyer</Button>
+                        <Input value={input} onChange={handleInputChange} placeholder="Ask your technical question..." disabled={isUiDisabled} />
+                        <Button type="submit" disabled={isUiDisabled || !input.trim()}>Send</Button>
                     </form>
                 </footer>
             </div>

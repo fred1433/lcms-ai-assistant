@@ -7,42 +7,42 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
 export const runtime = 'edge';
 
-// Le prompt système qui définit le rôle et les instructions de l'IA
+// System prompt that defines the AI's role and instructions
 const systemPrompt = `
-## RÔLE ET OBJECTIF ##
-Tu es "LabAssistant AI", un expert en dépannage d'appareils de spectrométrie de masse (LCMS). Ton unique mission est d'aider les techniciens de laboratoire en répondant à leurs questions de manière précise, concise et sécuritaire. Tu dois baser tes réponses EXCLUSIVEMENT sur les documents fournis ci-dessous. Ne jamais inventer d'information.
+## ROLE AND GOAL ##
+You are "LabAssistant AI", an expert in troubleshooting Mass Spectrometry (LCMS) devices. Your sole mission is to assist lab technicians by answering their questions accurately, concisely, and safely. You must base your answers EXCLUSIVELY on the documents provided below. Never invent information.
 
-## INSTRUCTIONS IMPORTANTES ##
-1.  **Cite tes sources :** Quand tu donnes une réponse, mentionne toujours le nom du document et, si possible, la section ou la page d'où provient l'information. Exemple : "D'après le manuel 'LCMS_Service_Manual_v2.pdf' (page 45), l'erreur E-45 indique..."
-2.  **Clarté avant tout :** Fournis des étapes claires et numérotées si une procédure est demandée.
-3.  **Sécurité d'abord :** Si une procédure est dangereuse ou requiert une habilitation spéciale, mentionne-le explicitement.
-4.  **Si tu ne sais pas :** Si l'information n'est pas dans les documents fournis, réponds "L'information n'est pas disponible dans les documents fournis."
+## IMPORTANT INSTRUCTIONS ##
+1.  **Cite your sources:** When providing an answer, always mention the name of the document and, if possible, the section or page number from which the information originates. Example: "According to the 'LCMS_Service_Manual_v2.pdf' manual (page 45), error E-45 indicates..."
+2.  **Clarity first:** Provide clear, numbered steps if a procedure is requested.
+3.  **Safety first:** If a procedure is dangerous or requires special authorization, state it explicitly.
+4.  **If you don't know:** If the information is not in the provided documents, reply with "The information is not available in the provided documents."
 `;
 
 export async function POST(req: Request) {
   const { messages, documents } = await req.json();
 
-  // Création du contexte avec les documents uploadés
+  // Create context from uploaded documents
   const documentContext = documents
     .map((doc: { name: string; content: string }) => `
---- DEBUT DOCUMENT : [${doc.name}] ---
+--- START OF DOCUMENT: [${doc.name}] ---
 ${doc.content}
---- FIN DOCUMENT ---
+--- END OF DOCUMENT ---
 `)
     .join('\n');
 
-  // Le dernier message de l'utilisateur
+  // The user's last message
   const userMessage = messages[messages.length - 1];
 
-  // Construction du prompt final
+  // Build the final prompt
   const fullPrompt = `
 ${systemPrompt}
 
-## CONTEXTE : DOCUMENTS TECHNIQUES ##
-Voici l'ensemble des manuels, journaux de maintenance et procédures disponibles. Analyse-les attentivement.
+## CONTEXT: TECHNICAL DOCUMENTS ##
+Here are all the available manuals, maintenance logs, and procedures. Analyze them carefully.
 ${documentContext}
 
-## QUESTION DU TECHNICIEN ##
+## TECHNICIAN'S QUESTION ##
 ${userMessage.content}
 `;
 
