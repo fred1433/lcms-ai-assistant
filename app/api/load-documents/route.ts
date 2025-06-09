@@ -4,6 +4,7 @@ import path from 'path';
 import pdf from 'pdf-parse';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
