@@ -1,6 +1,3 @@
 {
-  "public": true,
-  "engines": {
-    "node": "20.x"
-  }
+  "public": true
 } 
