@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { GoogleGenerativeAIStream, Message, StreamingTextResponse } from 'ai';
+import { supabase } from '@/lib/supabase';
 
 // IMPORTANT: Assurez-vous que votre variable d'environnement est bien nommée
 // NEXT_PUBLIC_GEMINI_API_KEY dans votre fichier .env.local
@@ -7,8 +8,6 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
 export const runtime = 'nodejs';
 export const maxDuration = 60; // 60 secondes de timeout
-
-const USAGE_LIMIT = 40; // Limite de 40 messages utilisateur par session
 
 // System prompt that defines the AI's role and instructions
 const systemPrompt = `
@@ -23,50 +22,54 @@ You are "LabAssistant AI", an expert in troubleshooting Mass Spectrometry (LCMS)
 `;
 
 export async function POST(req: Request) {
-  console.log('--- API /api/chat called ---');
-  const { messages, documents } = await req.json();
+  const { messages, document } = await req.json();
+  const lastUserMessage = messages[messages.length - 1];
 
-  // Compter le nombre de messages envoyés par l'utilisateur
-  const userMessagesCount = messages.filter((m: Message) => m.role === 'user').length;
+  // 1. Récupérer l'historique de la DB
+  const { data: dbMessages, error: msgError } = await supabase.from('messages').select('role, content').order('created_at');
+  if (msgError) {
+    return new Response(`Error fetching history: ${msgError.message}`, { status: 500 });
+  }
+  const historyForModel = dbMessages.map((msg): Message => ({ id: '', role: msg.role as 'user' | 'assistant', content: msg.content }));
 
-  if (userMessagesCount > USAGE_LIMIT) {
-    return new Response(
-      `Usage limit of ${USAGE_LIMIT} messages reached. Please start a new session.`,
-      { status: 429 } // 429 Too Many Requests
-    );
+  // 2. Construire le contexte du document temporaire, s'il existe
+  let documentContext = '';
+  if (document) {
+    documentContext = `## CONTEXT: A DOCUMENT HAS BEEN PROVIDED ##
+--- START OF DOCUMENT: [${document.name}] ---
+${document.content}
+--- END OF DOCUMENT ---`;
   }
 
-  // Create context from uploaded documents
-  const documentContext = documents
-    .map((doc: { name: string; content: string }) => `
---- START OF DOCUMENT: [${doc.name}] ---
-${doc.content}
---- END OF DOCUMENT ---
-`)
-    .join('\n');
-
-  // The user's last message
-  const userMessage = messages[messages.length - 1];
-
-  // Build the final prompt
-  const fullPrompt = `
+  // 3. Construire le prompt final
+  const promptForGemini = `
 ${systemPrompt}
 
-## CONTEXT: TECHNICAL DOCUMENTS ##
-Here are all the available manuals, maintenance logs, and procedures. Analyze them carefully.
 ${documentContext}
 
-## TECHNICIAN'S QUESTION ##
-${userMessage.content}
-`;
+## PREVIOUS CONVERSATION HISTORY ##
+${historyForModel.map(m => `${m.role}: ${m.content}`).join('\n')}
 
-  const model = genAI.getGenerativeModel({ 
-    model: process.env.GEMINI_MODEL_NAME || "gemini-1.5-pro-latest" 
+## CURRENT USER QUESTION ##
+user: ${lastUserMessage.content}
+assistant:`;
+
+  const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL_NAME! });
+  const stream = await model.generateContentStream(promptForGemini);
+
+  // 4. Stream la réponse et sauvegarder dans la DB
+  const aiStream = GoogleGenerativeAIStream(stream, {
+    onStart: async () => {
+      let contentToSave = lastUserMessage.content;
+      if (document) {
+        contentToSave = `[DOCUMENT ATTACHED: ${document.name}]\n\n${lastUserMessage.content}`;
+      }
+      await supabase.from('messages').insert({ role: 'user', content: contentToSave });
+    },
+    onCompletion: async (completion) => {
+      await supabase.from('messages').insert({ role: 'assistant', content: completion });
+    },
   });
 
-  const streamingResponse = await model.generateContentStream(fullPrompt);
-  
-  const stream = GoogleGenerativeAIStream(streamingResponse);
-
-  return new StreamingTextResponse(stream);
+  return new StreamingTextResponse(aiStream);
 } 

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useRef, useEffect } from 'react';
-import { useChat } from 'ai/react';
-import { exampleDocuments } from '@/lib/example-documents';
+import { useState, useEffect } from 'react';
+import { useChat, Message } from 'ai/react';
+import { supabase } from '@/lib/supabase';
 import type { TextItem } from 'pdfjs-dist/types/src/display/api';
 
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -24,88 +24,82 @@ const exampleQuestions = [
     "What is the power-on procedure for the ACQUITY QDa detector?",
 ];
 
-type Document = { name: string; content: string };
-
-const USAGE_LIMIT = 40;
+type TempDocument = { name: string; content: string };
 
 export default function Chat() {
-    const [userDocs, setUserDocs] = useState<Document[]>([]);
+    const [tempDoc, setTempDoc] = useState<TempDocument | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [isParsing, setIsParsing] = useState(false);
     
-    useEffect(() => {
-        // Dynamically import pdfjs and set workerSrc only on client side
-        import('pdfjs-dist/build/pdf.min.mjs').then(pdfjs => {
-            pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
-        });
-    }, []);
-
-    const allDocs = [...exampleDocuments, ...userDocs];
-
-    const { messages, input, handleInputChange, handleSubmit, setInput, isLoading: isChatLoading } = useChat({
-        api: '/api/chat',
-        body: { documents: allDocs },
+    const { messages, setMessages, input, handleInputChange, handleSubmit, setInput, isLoading: isChatLoading } = useChat({
+        // On envoie le document temporaire avec la requête
+        body: { document: tempDoc },
+        // Quand une nouvelle réponse est reçue, on efface le document temporaire
+        onFinish: () => {
+          setTempDoc(null);
+        },
         onError: (e) => setError(e.message),
     });
 
+    // Charger l'historique initial
+    useEffect(() => {
+        const fetchInitialData = async () => {
+            const { data: initialMessages } = await supabase.from('messages').select('role, content').order('created_at');
+            setMessages(initialMessages!.map((m: any) => ({ id: Math.random().toString(), role: m.role, content: m.content } as Message)));
+        };
+        fetchInitialData();
+    }, [setMessages]);
+
     const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        const files = event.target.files;
-        if (!files) return;
+        const file = event.target.files?.[0];
+        if (!file) return;
 
         setIsParsing(true);
+        setError(null);
         const pdfjs = await import('pdfjs-dist/build/pdf.min.mjs');
+        pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
-        for (const file of Array.from(files)) {
-            try {
-                let content = '';
-                if (file.type === 'application/pdf') {
-                    const arrayBuffer = await file.arrayBuffer();
-                    const pdf = await pdfjs.getDocument(arrayBuffer).promise;
-                    let text = '';
-                    for (let i = 1; i <= pdf.numPages; i++) {
-                        const page = await pdf.getPage(i);
-                        const pageText = await page.getTextContent();
-                        text += pageText.items.map((item: TextItem) => item.str).join(' ');
-                    }
-                    content = text;
-                } else {
-                    content = await file.text();
+        try {
+            let content = '';
+            if (file.type === 'application/pdf') {
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjs.getDocument(arrayBuffer).promise;
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const pageText = await page.getTextContent();
+                    content += pageText.items.map((item: TextItem) => item.str).join(' ');
                 }
-                setUserDocs(prev => [...prev, { name: file.name, content }]);
-            } catch (err) {
-                setError(`Error while parsing file ${file.name}`);
+            } else {
+                content = await file.text();
             }
+            setTempDoc({ name: file.name, content });
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            setIsParsing(false);
         }
-        setIsParsing(false);
     };
-
-    const userMessagesCount = messages.filter(m => m.role === 'user').length;
-    const messagesLeft = USAGE_LIMIT - userMessagesCount;
-
-    const isUiDisabled = isChatLoading || isParsing || messagesLeft <= 0;
+    
+    const isUiDisabled = isChatLoading || isParsing;
 
     return (
         <div className="grid grid-cols-[3fr_7fr] h-screen bg-slate-50 font-sans">
             <div className="flex-shrink-0 border-r border-slate-200 bg-white p-6 flex flex-col gap-6">
                 <Card>
                     <CardHeader>
-                        <CardTitle>Documents</CardTitle>
-                        <CardDescription>Review examples or upload your own.</CardDescription>
+                        <CardTitle>Attach a Document</CardTitle>
+                        <CardDescription>The document will be used as context for your next message only.</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <h4 className="font-semibold text-slate-700 mb-2">Pre-loaded Examples</h4>
-                        <div className="space-y-2">
-                            {exampleDocuments.map(doc => <div key={doc.name} className="text-base p-3 bg-slate-100 rounded-md truncate" title={doc.name}>{doc.name}</div>)}
-                        </div>
-                        <hr className="my-4" />
-                        <h4 className="font-semibold text-slate-700 mb-2">Upload Your Documents</h4>
-                        <input type="file" id="file-upload" multiple onChange={handleFileChange} className="hidden" accept=".pdf,.txt,.csv" disabled={isParsing} />
+                        <input type="file" id="file-upload" onChange={handleFileChange} className="hidden" accept=".pdf,.txt,.csv" disabled={isParsing} />
                         <Button onClick={() => document.getElementById('file-upload')?.click()} disabled={isParsing} className="w-full">
                             {isParsing ? 'Parsing...' : 'Upload (PDF, TXT, CSV)'}
                         </Button>
-                        <div className="mt-2 space-y-2">
-                            {userDocs.map(doc => <div key={doc.name} className="text-base p-3 bg-green-100 rounded-md truncate" title={doc.name}>{doc.name}</div>)}
-                        </div>
+                        {tempDoc && (
+                          <div className="mt-2 text-sm p-3 bg-green-100 rounded-md truncate" title={tempDoc.name}>
+                            Attached: <strong>{tempDoc.name}</strong>
+                          </div>
+                        )}
                     </CardContent>
                 </Card>
                 <Card className="flex-grow">
@@ -123,10 +117,7 @@ export default function Chat() {
             
             <div className="flex flex-col h-screen">
                 <header className="p-4 border-b border-slate-200 bg-white flex justify-between items-center">
-                    <h1 className="text-2xl font-bold">LabAssistant AI</h1>
-                    <div className="text-sm text-slate-600 bg-slate-100 px-3 py-1 rounded-full">
-                        {messagesLeft > 0 ? <strong>{messagesLeft} messages left</strong> : <strong>Usage limit reached</strong>}
-                    </div>
+                    <h1 className="text-2xl font-bold">LabAssistant AI (Shared Memory)</h1>
                     {error && <div className="text-sm text-red-500 bg-red-100 p-2 rounded-md">{error}</div>}
                 </header>
                 <main className="flex-grow p-6 overflow-y-auto">
