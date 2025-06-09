@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useChat, Message } from 'ai/react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase/client';
 import type { TextItem } from 'pdfjs-dist/types/src/display/api';
 
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";

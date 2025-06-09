@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { GoogleGenerativeAIStream, Message, StreamingTextResponse } from 'ai';
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin as supabase } from '@/lib/supabase/server';
 
 // IMPORTANT: Assurez-vous que votre variable d'environnement est bien nommée
 // NEXT_PUBLIC_GEMINI_API_KEY dans votre fichier .env.local
