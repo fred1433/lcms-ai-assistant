@@ -46,7 +46,9 @@ ${documentContext}
 ${userMessage.content}
 `;
 
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro-latest" });
+  const model = genAI.getGenerativeModel({ 
+    model: process.env.GEMINI_MODEL_NAME || "gemini-1.5-pro-latest" 
+  });
 
   const streamingResponse = await model.generateContentStream(fullPrompt);
   

@@ -2,11 +2,15 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useChat } from 'ai/react';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
+import * as pdfjs from 'pdfjs-dist';
+
+// Configuration du worker pour pdfjs-dist
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 // Icônes simples pour le chat
 const BotIcon = () => (
@@ -16,143 +20,122 @@ const UserIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
 );
 
-
 const exampleQuestions = [
-    "Que signifie le code d'erreur P-21 ?",
-    "Décris la procédure de nettoyage hebdomadaire.",
-    "Quelle est la pression nominale de la pompe A ?",
-    "La procédure X nécessite-t-elle un équipement de sécurité spécial ?",
+    "D'après les logs, quelle est la cause probable pour l'erreur P-21 sur la machine LCMS-001 ?",
+    "Que signifie une LED de statut qui clignote en orange sur le détecteur QDa ?",
+    "Quelle est la procédure de mise sous tension du détecteur ACQUITY QDa ?",
 ];
 
-export default function Chat() {
-    const [uploadedFiles, setUploadedFiles] = useState<{ name: string; content: string }[]>([]);
-    const [isParsing, setIsParsing] = useState(false);
-    const fileInputRef = useRef<HTMLInputElement>(null);
-    const chatContainerRef = useRef<HTMLDivElement>(null);
+type Document = { name: string; content: string };
 
-    const { messages, input, handleInputChange, handleSubmit, setInput, isLoading } = useChat({
-        api: '/api/chat',
-        body: {
-            documents: uploadedFiles,
-        },
-        onError: (error) => {
-            console.error("Chat error:", error);
-        }
-    });
+export default function Chat() {
+    const [preloadedDocs, setPreloadedDocs] = useState<Document[]>([]);
+    const [userDocs, setUserDocs] = useState<Document[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    
+    const allDocs = [...preloadedDocs, ...userDocs];
 
     useEffect(() => {
-        if (chatContainerRef.current) {
-            chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-        }
-    }, [messages]);
+        const loadInitialDocuments = async () => {
+            try {
+                const response = await fetch('/api/load-documents');
+                if (!response.ok) throw new Error('Failed to fetch pre-loaded documents');
+                const data = await response.json();
+                setPreloadedDocs(data.documents);
+            } catch (err) {
+                setError("Impossible de charger les documents d'exemple.");
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        loadInitialDocuments();
+    }, []);
+
+    const { messages, input, handleInputChange, handleSubmit, setInput, isLoading: isChatLoading } = useChat({
+        api: '/api/chat',
+        body: { documents: allDocs },
+        onError: (e) => setError(e.message),
+    });
 
     const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const files = event.target.files;
-        if (!files || files.length === 0) return;
+        if (!files) return;
 
-        setIsParsing(true);
-        const newFiles = [...uploadedFiles];
-
+        setIsLoading(true);
         for (const file of Array.from(files)) {
-            if (newFiles.some(f => f.name === file.name)) continue;
-
-            let content = '';
             try {
-                if (file.type.startsWith("text/")) {
-                    content = await file.text();
-                    newFiles.push({ name: file.name, content });
+                let content = '';
+                if (file.type === 'application/pdf') {
+                    const arrayBuffer = await file.arrayBuffer();
+                    const pdf = await pdfjs.getDocument(arrayBuffer).promise;
+                    let text = '';
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const pageText = await page.getTextContent();
+                        text += pageText.items.map(item => (item as any).str).join(' ');
+                    }
+                    content = text;
                 } else {
-                    console.warn(`Unsupported file type: ${file.type}. Skipping file ${file.name}.`);
-                    // On pourrait afficher une notification à l'utilisateur ici
-                    continue;
+                    content = await file.text();
                 }
-            } catch (error) {
-                console.error(`Error parsing file ${file.name}:`, error);
+                setUserDocs(prev => [...prev, { name: file.name, content }]);
+            } catch (err) {
+                setError(`Erreur lors de l'analyse du fichier ${file.name}`);
             }
         }
-
-        setUploadedFiles(newFiles);
-        setIsParsing(false);
-        if (fileInputRef.current) {
-            fileInputRef.current.value = '';
-        }
+        setIsLoading(false);
     };
 
-    const handleExampleQuestionClick = (question: string) => {
-        setInput(question);
-    };
+    const isUiDisabled = isLoading || isChatLoading;
 
     return (
         <div className="grid grid-cols-[3fr_7fr] h-screen bg-slate-50 font-sans">
-            {/* Colonne de gauche: Upload et Exemples */}
             <div className="flex-shrink-0 border-r border-slate-200 bg-white p-6 flex flex-col gap-6">
                 <Card>
                     <CardHeader>
-                        <CardTitle>Documents Techniques</CardTitle>
-                        <CardDescription>Uploadez les manuels (TXT, CSV)</CardDescription>
+                        <CardTitle>Documents</CardTitle>
+                        <CardDescription>Consultez les exemples ou uploadez les vôtres.</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <input
-                            type="file"
-                            ref={fileInputRef}
-                            onChange={handleFileChange}
-                            multiple
-                            className="hidden"
-                            accept=".txt,.csv"
-                            disabled={isParsing}
-                        />
-                        <Button onClick={() => fileInputRef.current?.click()} disabled={isParsing} className="w-full">
-                            {isParsing ? 'Analyse en cours...' : 'Uploader des fichiers'}
-                        </Button>
-
-                        <div className="mt-4 space-y-2">
-                            {uploadedFiles.map((file, index) => (
-                                <div key={index} className="text-base p-3 bg-slate-100 rounded-md truncate">
-                                    {file.name}
-                                </div>
-                            ))}
+                        <h4 className="font-semibold text-slate-700 mb-2">Exemples pré-chargés</h4>
+                        {isLoading && <p className="text-sm text-slate-500">Chargement...</p>}
+                        <div className="space-y-2">
+                            {preloadedDocs.map(doc => <div key={doc.name} className="text-base p-3 bg-slate-100 rounded-md truncate" title={doc.name}>{doc.name}</div>)}
+                        </div>
+                        <hr className="my-4" />
+                        <h4 className="font-semibold text-slate-700 mb-2">Uploadez vos documents</h4>
+                        <input type="file" id="file-upload" multiple onChange={handleFileChange} className="hidden" accept=".pdf,.txt,.csv" />
+                        <Button onClick={() => document.getElementById('file-upload')?.click()} disabled={isLoading} className="w-full">Uploader (PDF, TXT, CSV)</Button>
+                        <div className="mt-2 space-y-2">
+                            {userDocs.map(doc => <div key={doc.name} className="text-base p-3 bg-green-100 rounded-md truncate" title={doc.name}>{doc.name}</div>)}
                         </div>
                     </CardContent>
-                    <CardFooter>
-                        <p className="text-sm text-slate-500">
-                            Les fichiers sont traités localement sur votre navigateur.
-                        </p>
-                    </CardFooter>
                 </Card>
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Exemples</CardTitle>
-                        <CardDescription>Cliquez pour essayer une question</CardDescription>
+                <Card className="flex-grow">
+                     <CardHeader>
+                        <CardTitle>Exemples de Questions</CardTitle>
+                        <CardDescription>Cliquez pour tester</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="space-y-3">
-                            {exampleQuestions.map((q, i) => (
-                                <Button
-                                    key={i}
-                                    variant="outline"
-                                    className="w-full text-left justify-start h-auto whitespace-normal"
-                                    onClick={() => handleExampleQuestionClick(q)}
-                                    disabled={isLoading || uploadedFiles.length === 0}
-                                >
-                                    {q}
-                                </Button>
-                            ))}
+                            {exampleQuestions.map((q, i) => <Button key={i} variant="outline" className="w-full text-left justify-start h-auto whitespace-normal" onClick={() => setInput(q)} disabled={isUiDisabled}>{q}</Button>)}
                         </div>
                     </CardContent>
                 </Card>
             </div>
-
-
-            {/* Colonne de droite: Interface de Chat */}
+            
             <div className="flex flex-col h-screen">
                 <header className="p-4 border-b border-slate-200 bg-white flex justify-between items-center">
                     <h1 className="text-2xl font-bold">LabAssistant AI</h1>
+                    {error && <div className="text-sm text-red-500 bg-red-100 p-2 rounded-md">{error}</div>}
                 </header>
-                
-                <main ref={chatContainerRef} className="flex-grow p-6 overflow-y-auto">
+                <main className="flex-grow p-6 overflow-y-auto">
                     <div className="space-y-6">
                         {messages.length === 0 && !isLoading && (
-                             <div className="text-center text-slate-500">Uploadez un document et posez une question pour commencer.</div>
+                             <div className="text-center text-slate-500 h-full flex items-center justify-center">
+                                {isLoading ? 'Chargement des documents...' : 'Les documents sont chargés. Posez une question pour commencer.'}
+                             </div>
                         )}
                         {messages.map((m, index) => (
                             <div key={index} className={`flex items-start gap-4 ${m.role === 'user' ? 'justify-end' : ''}`}>
@@ -171,7 +154,7 @@ export default function Chat() {
                                 )}
                             </div>
                         ))}
-                         {isLoading && (
+                         {isChatLoading && (
                             <div className="flex items-start gap-4">
                                 <Avatar className="w-10 h-10">
                                     <AvatarFallback><BotIcon /></AvatarFallback>
@@ -183,18 +166,10 @@ export default function Chat() {
                         )}
                     </div>
                 </main>
-                
                 <footer className="p-4 border-t border-slate-200 bg-white">
                     <form onSubmit={handleSubmit} className="flex gap-4">
-                        <Input
-                            value={input}
-                            onChange={handleInputChange}
-                            placeholder={uploadedFiles.length === 0 ? "Veuillez uploader un document d'abord" : "Posez votre question technique ici..."}
-                            disabled={isLoading || uploadedFiles.length === 0}
-                        />
-                        <Button type="submit" disabled={isLoading || !input.trim()}>
-                            Envoyer
-                        </Button>
+                        <Input value={input} onChange={handleInputChange} placeholder="Posez votre question technique..." disabled={isUiDisabled} />
+                        <Button type="submit" disabled={isUiDisabled || !input.trim()}>Envoyer</Button>
                     </form>
                 </footer>
             </div>
