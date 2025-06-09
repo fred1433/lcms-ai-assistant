@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useChat } from 'ai/react';
 import * as pdfjs from 'pdfjs-dist';
+import { exampleDocuments } from '@/lib/example-documents';
 
 // Configuration du worker pour pdfjs-dist
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -29,28 +30,11 @@ const exampleQuestions = [
 type Document = { name: string; content: string };
 
 export default function Chat() {
-    const [preloadedDocs, setPreloadedDocs] = useState<Document[]>([]);
     const [userDocs, setUserDocs] = useState<Document[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [isParsing, setIsParsing] = useState(false);
     
-    const allDocs = [...preloadedDocs, ...userDocs];
-
-    useEffect(() => {
-        const loadInitialDocuments = async () => {
-            try {
-                const response = await fetch('/api/load-documents');
-                if (!response.ok) throw new Error('Failed to fetch pre-loaded documents');
-                const data = await response.json();
-                setPreloadedDocs(data.documents);
-            } catch (err) {
-                setError("Impossible de charger les documents d'exemple.");
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        loadInitialDocuments();
-    }, []);
+    const allDocs = [...exampleDocuments, ...userDocs];
 
     const { messages, input, handleInputChange, handleSubmit, setInput, isLoading: isChatLoading } = useChat({
         api: '/api/chat',
@@ -62,7 +46,7 @@ export default function Chat() {
         const files = event.target.files;
         if (!files) return;
 
-        setIsLoading(true);
+        setIsParsing(true);
         for (const file of Array.from(files)) {
             try {
                 let content = '';
@@ -84,10 +68,10 @@ export default function Chat() {
                 setError(`Erreur lors de l'analyse du fichier ${file.name}`);
             }
         }
-        setIsLoading(false);
+        setIsParsing(false);
     };
 
-    const isUiDisabled = isLoading || isChatLoading;
+    const isUiDisabled = isChatLoading || isParsing;
 
     return (
         <div className="grid grid-cols-[3fr_7fr] h-screen bg-slate-50 font-sans">
@@ -99,14 +83,15 @@ export default function Chat() {
                     </CardHeader>
                     <CardContent>
                         <h4 className="font-semibold text-slate-700 mb-2">Exemples pré-chargés</h4>
-                        {isLoading && <p className="text-sm text-slate-500">Chargement...</p>}
                         <div className="space-y-2">
-                            {preloadedDocs.map(doc => <div key={doc.name} className="text-base p-3 bg-slate-100 rounded-md truncate" title={doc.name}>{doc.name}</div>)}
+                            {exampleDocuments.map(doc => <div key={doc.name} className="text-base p-3 bg-slate-100 rounded-md truncate" title={doc.name}>{doc.name}</div>)}
                         </div>
                         <hr className="my-4" />
                         <h4 className="font-semibold text-slate-700 mb-2">Uploadez vos documents</h4>
-                        <input type="file" id="file-upload" multiple onChange={handleFileChange} className="hidden" accept=".pdf,.txt,.csv" />
-                        <Button onClick={() => document.getElementById('file-upload')?.click()} disabled={isLoading} className="w-full">Uploader (PDF, TXT, CSV)</Button>
+                        <input type="file" id="file-upload" multiple onChange={handleFileChange} className="hidden" accept=".pdf,.txt,.csv" disabled={isParsing} />
+                        <Button onClick={() => document.getElementById('file-upload')?.click()} disabled={isParsing} className="w-full">
+                            {isParsing ? 'Analyse en cours...' : 'Uploader (PDF, TXT, CSV)'}
+                        </Button>
                         <div className="mt-2 space-y-2">
                             {userDocs.map(doc => <div key={doc.name} className="text-base p-3 bg-green-100 rounded-md truncate" title={doc.name}>{doc.name}</div>)}
                         </div>
@@ -132,9 +117,9 @@ export default function Chat() {
                 </header>
                 <main className="flex-grow p-6 overflow-y-auto">
                     <div className="space-y-6">
-                        {messages.length === 0 && !isLoading && (
+                        {messages.length === 0 && !isParsing && (
                              <div className="text-center text-slate-500 h-full flex items-center justify-center">
-                                {isLoading ? 'Chargement des documents...' : 'Les documents sont chargés. Posez une question pour commencer.'}
+                                {isParsing ? 'Analyse en cours...' : 'Les documents sont chargés. Posez une question pour commencer.'}
                              </div>
                         )}
                         {messages.map((m, index) => (
