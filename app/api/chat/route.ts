@@ -5,7 +5,8 @@ import { GoogleGenerativeAIStream, StreamingTextResponse } from 'ai';
 // NEXT_PUBLIC_GEMINI_API_KEY dans votre fichier .env.local
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
-export const runtime = 'edge';
+export const runtime = 'nodejs';
+export const maxDuration = 60; // 60 secondes de timeout
 
 // System prompt that defines the AI's role and instructions
 const systemPrompt = `
