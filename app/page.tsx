@@ -146,7 +146,7 @@ export default function Chat() {
                                 <div className={`max-w-2xl p-4 rounded-lg shadow-sm ${m.role === 'user' ? 'bg-blue-500 text-white' : 'bg-white'}`}>
                                     <p className="text-base whitespace-pre-wrap">{m.content}</p>
                                     {m.role === 'assistant' && error && m.id === messages[messages.length - 1].id && (
-                                        <div className="text-xs text-red-500 pt-2">Error: {typeof error === 'string' ? error : error.message}</div>
+                                        <div className="text-xs text-red-500 pt-2">An error occurred.</div>
                                     )}
                                 </div>
                                 {m.role === 'user' && (
