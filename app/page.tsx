@@ -2,11 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useChat } from 'ai/react';
-import * as pdfjs from 'pdfjs-dist';
 import { exampleDocuments } from '@/lib/example-documents';
-
-// Configuration du worker pour pdfjs-dist
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -34,6 +30,13 @@ export default function Chat() {
     const [error, setError] = useState<string | null>(null);
     const [isParsing, setIsParsing] = useState(false);
     
+    useEffect(() => {
+        // Dynamically import pdfjs and set workerSrc only on client side
+        import('pdfjs-dist/build/pdf.min.mjs').then(pdfjs => {
+            pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+        });
+    }, []);
+
     const allDocs = [...exampleDocuments, ...userDocs];
 
     const { messages, input, handleInputChange, handleSubmit, setInput, isLoading: isChatLoading } = useChat({
@@ -47,6 +50,8 @@ export default function Chat() {
         if (!files) return;
 
         setIsParsing(true);
+        const pdfjs = await import('pdfjs-dist/build/pdf.min.mjs');
+
         for (const file of Array.from(files)) {
             try {
                 let content = '';
