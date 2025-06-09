@@ -26,6 +26,8 @@ const exampleQuestions = [
 
 type Document = { name: string; content: string };
 
+const USAGE_LIMIT = 40;
+
 export default function Chat() {
     const [userDocs, setUserDocs] = useState<Document[]>([]);
     const [error, setError] = useState<string | null>(null);
@@ -77,7 +79,10 @@ export default function Chat() {
         setIsParsing(false);
     };
 
-    const isUiDisabled = isChatLoading || isParsing;
+    const userMessagesCount = messages.filter(m => m.role === 'user').length;
+    const messagesLeft = USAGE_LIMIT - userMessagesCount;
+
+    const isUiDisabled = isChatLoading || isParsing || messagesLeft <= 0;
 
     return (
         <div className="grid grid-cols-[3fr_7fr] h-screen bg-slate-50 font-sans">
@@ -119,6 +124,9 @@ export default function Chat() {
             <div className="flex flex-col h-screen">
                 <header className="p-4 border-b border-slate-200 bg-white flex justify-between items-center">
                     <h1 className="text-2xl font-bold">LabAssistant AI</h1>
+                    <div className="text-sm text-slate-600 bg-slate-100 px-3 py-1 rounded-full">
+                        {messagesLeft > 0 ? <strong>{messagesLeft} messages left</strong> : <strong>Usage limit reached</strong>}
+                    </div>
                     {error && <div className="text-sm text-red-500 bg-red-100 p-2 rounded-md">{error}</div>}
                 </header>
                 <main className="flex-grow p-6 overflow-y-auto">
@@ -137,6 +145,9 @@ export default function Chat() {
                                 )}
                                 <div className={`max-w-2xl p-4 rounded-lg shadow-sm ${m.role === 'user' ? 'bg-blue-500 text-white' : 'bg-white'}`}>
                                     <p className="text-base whitespace-pre-wrap">{m.content}</p>
+                                    {m.role === 'assistant' && error && m.id === messages[messages.length - 1].id && (
+                                        <div className="text-xs text-red-500 pt-2">Error: {error.message}</div>
+                                    )}
                                 </div>
                                 {m.role === 'user' && (
                                     <Avatar className="w-10 h-10">

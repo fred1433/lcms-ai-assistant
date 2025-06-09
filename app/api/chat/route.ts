@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { GoogleGenerativeAIStream, StreamingTextResponse } from 'ai';
+import { GoogleGenerativeAIStream, Message, StreamingTextResponse } from 'ai';
 
 // IMPORTANT: Assurez-vous que votre variable d'environnement est bien nommée
 // NEXT_PUBLIC_GEMINI_API_KEY dans votre fichier .env.local
@@ -7,6 +7,8 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
 export const runtime = 'nodejs';
 export const maxDuration = 60; // 60 secondes de timeout
+
+const USAGE_LIMIT = 40; // Limite de 40 messages utilisateur par session
 
 // System prompt that defines the AI's role and instructions
 const systemPrompt = `
@@ -23,6 +25,16 @@ You are "LabAssistant AI", an expert in troubleshooting Mass Spectrometry (LCMS)
 export async function POST(req: Request) {
   console.log('--- API /api/chat called ---');
   const { messages, documents } = await req.json();
+
+  // Compter le nombre de messages envoyés par l'utilisateur
+  const userMessagesCount = messages.filter((m: Message) => m.role === 'user').length;
+
+  if (userMessagesCount > USAGE_LIMIT) {
+    return new Response(
+      `Usage limit of ${USAGE_LIMIT} messages reached. Please start a new session.`,
+      { status: 429 } // 429 Too Many Requests
+    );
+  }
 
   // Create context from uploaded documents
   const documentContext = documents
