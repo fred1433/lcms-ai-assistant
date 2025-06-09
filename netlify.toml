@@ -3,15 +3,12 @@
   publish = ".next"
 
 [functions]
-  # Déplacer la fonction vers Francfort pour réduire la latence
+  # Déplacer la fonction vers Francfort pour réduire la latence et exclure les fichiers inutiles
   region = "eu-central-1"
-
-[[plugins]]
-  package = "@netlify/plugin-nextjs"
-
-[functions]
   included_files = ["!node_modules/.pnpm/**"]
   [functions."___netlify-server-handler"]
     included_files = ["!node_modules/.pnpm/**"]
     node_bundler = "esbuild"
-    region = "aws-us-east-1" 
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs" 
