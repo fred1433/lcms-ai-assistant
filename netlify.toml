@@ -2,14 +2,5 @@
   command = "npm run build"
   publish = ".next"
 
-[functions]
-  included_files = ["!node_modules/.pnpm/**"]
-
-  [functions."___netlify-server-handler"]
-    included_files = ["!node_modules/.pnpm/**"]
-    node_bundler = "esbuild"
-    # Forcer la région ici
-    region = "eu-central-1"
-
 [[plugins]]
   package = "@netlify/plugin-nextjs" 
