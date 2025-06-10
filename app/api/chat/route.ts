@@ -3,7 +3,7 @@ import { GoogleGenerativeAIStream, Message, StreamingTextResponse } from 'ai';
 import { supabaseAdmin as supabase } from '@/lib/supabase/server';
 
 // IMPORTANT: Assurez-vous que votre variable d'environnement est bien nommée
-// NEXT_PUBLIC_GEMINI_API_KEY dans votre fichier .env.local
+// GEMINI_API_KEY dans votre fichier .env.local
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
 export const runtime = 'nodejs';
@@ -22,6 +22,26 @@ You are "LabAssistant AI", an expert in troubleshooting Mass Spectrometry (LCMS)
 `;
 
 export async function POST(req: Request) {
+  // Log pour débogage
+  console.log('--- New request to /api/chat ---');
+  console.log('Checking environment variables...');
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const geminiKey = process.env.GEMINI_API_KEY;
+
+  console.log('Supabase URL available:', !!supabaseUrl);
+  console.log('Supabase Service Key available:', !!serviceKey);
+  console.log('Gemini API Key available:', !!geminiKey);
+
+  if (serviceKey) {
+    console.log('Service Key starts with:', serviceKey.substring(0, 5));
+    console.log('Service Key ends with:', serviceKey.substring(serviceKey.length - 5));
+  }
+   if (geminiKey) {
+    console.log('Gemini Key starts with:', geminiKey.substring(0, 5));
+  }
+  console.log('------------------------------------');
+
   const { messages, document } = await req.json();
   const lastUserMessage = messages[messages.length - 1];
 
