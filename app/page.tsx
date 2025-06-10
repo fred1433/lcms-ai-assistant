@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useChat, Message } from 'ai/react';
 import { supabase } from '@/lib/supabase/client';
 import type { TextItem } from 'pdfjs-dist/types/src/display/api';
@@ -30,6 +30,7 @@ export default function Chat() {
     const [tempDoc, setTempDoc] = useState<TempDocument | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [isParsing, setIsParsing] = useState(false);
+    const messagesEndRef = useRef<null | HTMLDivElement>(null);
     
     const { messages, setMessages, input, handleInputChange, handleSubmit, setInput, isLoading: isChatLoading } = useChat({
         // On envoie le document temporaire avec la requête
@@ -41,6 +42,10 @@ export default function Chat() {
         onError: (e) => setError(e.message),
     });
 
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    };
+
     // Charger l'historique initial
     useEffect(() => {
         const fetchInitialData = async () => {
@@ -49,6 +54,11 @@ export default function Chat() {
         };
         fetchInitialData();
     }, [setMessages]);
+
+    // Auto-scroll on new messages or when assistant starts typing
+    useEffect(() => {
+        scrollToBottom();
+    }, [messages, isChatLoading]);
 
     const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
@@ -102,22 +112,11 @@ export default function Chat() {
                         )}
                     </CardContent>
                 </Card>
-                <Card className="flex-grow">
-                     <CardHeader>
-                        <CardTitle>Example Questions</CardTitle>
-                        <CardDescription>Click one to try</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="space-y-3">
-                            {exampleQuestions.map((q, i) => <Button key={i} variant="outline" className="w-full text-left justify-start h-auto whitespace-normal" onClick={() => setInput(q)} disabled={isUiDisabled}>{q}</Button>)}
-                        </div>
-                    </CardContent>
-                </Card>
             </div>
             
             <div className="flex flex-col h-screen">
                 <header className="p-4 border-b border-slate-200 bg-white flex justify-between items-center">
-                    <h1 className="text-2xl font-bold">LabAssistant AI (Shared Memory)</h1>
+                    <h1 className="text-2xl font-bold">LabAssistant AI</h1>
                     {error && <div className="text-sm text-red-500 bg-red-100 p-2 rounded-md">{error}</div>}
                 </header>
                 <main className="flex-grow p-6 overflow-y-auto">
@@ -157,6 +156,7 @@ export default function Chat() {
                                 </div>
                             </div>
                         )}
+                        <div ref={messagesEndRef} />
                     </div>
                 </main>
                 <footer className="p-4 border-t border-slate-200 bg-white">
