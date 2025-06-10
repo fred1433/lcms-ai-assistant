@@ -121,9 +121,9 @@ export default function Chat() {
                 </header>
                 <main className="flex-grow p-6 overflow-y-auto">
                     <div className="space-y-6">
-                        {messages.length === 0 && !isParsing && (
+                        {messages.length === 0 && (
                              <div className="text-center text-slate-500 h-full flex items-center justify-center">
-                                {isParsing ? 'Parsing files...' : 'Documents are loaded. Ask a question to begin.'}
+                                {isParsing ? 'Parsing document...' : 'Upload a document for context, or ask a question to get started.'}
                              </div>
                         )}
                         {messages.map((m, index) => (
