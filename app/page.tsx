@@ -98,7 +98,7 @@ export default function Chat() {
                 <Card>
                     <CardHeader>
                         <CardTitle>Attach a Document</CardTitle>
-                        <CardDescription>The document will be used as context for your next message only.</CardDescription>
+                        <CardDescription>AI will remember the file.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <input type="file" id="file-upload" onChange={handleFileChange} className="hidden" accept=".pdf,.txt,.csv" disabled={isParsing} />
