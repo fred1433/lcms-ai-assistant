@@ -26,6 +26,8 @@ const exampleQuestions = [
 
 type TempDocument = { name: string; content: string };
 
+const MAX_DOCUMENTS = 3;
+
 export default function Chat() {
     const [documents, setDocuments] = useState<TempDocument[]>([]);
     const [error, setError] = useState<string | null>(null);
@@ -58,6 +60,13 @@ export default function Chat() {
     const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const files = event.target.files;
         if (!files || files.length === 0) return;
+
+        if (documents.length + files.length > MAX_DOCUMENTS) {
+            setError(`You cannot attach more than ${MAX_DOCUMENTS} documents in total.`);
+            // Reset file input to allow re-selection
+            event.target.value = '';
+            return;
+        }
 
         setIsParsing(true);
         setError(null);
@@ -92,6 +101,7 @@ export default function Chat() {
     };
     
     const isUiDisabled = isChatLoading || isParsing;
+    const isUploadDisabled = isParsing || documents.length >= MAX_DOCUMENTS;
 
   return (
         <div className="grid grid-cols-[3fr_7fr] h-screen bg-slate-50 font-sans">
@@ -99,11 +109,11 @@ export default function Chat() {
                 <Card>
                     <CardHeader>
                         <CardTitle>Attach a Document</CardTitle>
-                        <CardDescription>AI will remember the file.</CardDescription>
+                        <CardDescription>AI will remember the file. (Max {MAX_DOCUMENTS} files)</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <input type="file" id="file-upload" onChange={handleFileChange} className="hidden" accept=".pdf,.txt,.csv" disabled={isParsing} multiple />
-                        <Button onClick={() => document.getElementById('file-upload')?.click()} disabled={isParsing} className="w-full">
+                        <input type="file" id="file-upload" onChange={handleFileChange} className="hidden" accept=".pdf,.txt,.csv" disabled={isUploadDisabled} multiple />
+                        <Button onClick={() => document.getElementById('file-upload')?.click()} disabled={isUploadDisabled} className="w-full">
                             {isParsing ? 'Parsing...' : 'Upload (PDF, TXT, CSV)'}
                         </Button>
                         {documents.length > 0 && (
