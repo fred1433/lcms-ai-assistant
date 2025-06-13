@@ -109,7 +109,7 @@ export default function Chat() {
                 <Card>
                     <CardHeader>
                         <CardTitle>Attach a Document</CardTitle>
-                        <CardDescription>AI will remember the file. (Max {MAX_DOCUMENTS} files)</CardDescription>
+                        <CardDescription>Upload max 3 files per message</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <input type="file" id="file-upload" onChange={handleFileChange} className="hidden" accept=".pdf,.txt,.csv" disabled={isUploadDisabled} multiple />
