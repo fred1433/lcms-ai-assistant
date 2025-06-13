@@ -27,18 +27,13 @@ const exampleQuestions = [
 type TempDocument = { name: string; content: string };
 
 export default function Chat() {
-    const [tempDoc, setTempDoc] = useState<TempDocument | null>(null);
+    const [documents, setDocuments] = useState<TempDocument[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [isParsing, setIsParsing] = useState(false);
     const messagesEndRef = useRef<null | HTMLDivElement>(null);
     
     const { messages, setMessages, input, handleInputChange, handleSubmit, setInput, isLoading: isChatLoading } = useChat({
-        // On envoie le document temporaire avec la requête
-        body: { document: tempDoc },
-        // Quand une nouvelle réponse est reçue, on efface le document temporaire
-        onFinish: () => {
-          setTempDoc(null);
-        },
+        body: { documents },
         onError: (e) => setError(e.message),
     });
 
@@ -61,8 +56,8 @@ export default function Chat() {
     }, [messages, isChatLoading]);
 
     const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        if (!file) return;
+        const files = event.target.files;
+        if (!files || files.length === 0) return;
 
         setIsParsing(true);
         setError(null);
@@ -70,29 +65,35 @@ export default function Chat() {
         pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
         try {
-            let content = '';
-            if (file.type === 'application/pdf') {
-                const arrayBuffer = await file.arrayBuffer();
-                const pdf = await pdfjs.getDocument(arrayBuffer).promise;
-                for (let i = 1; i <= pdf.numPages; i++) {
-                    const page = await pdf.getPage(i);
-                    const pageText = await page.getTextContent();
-                    content += pageText.items.map((item: TextItem) => item.str).join(' ');
+            const newDocuments: TempDocument[] = [];
+            for (const file of Array.from(files)) {
+                let content = '';
+                if (file.type === 'application/pdf') {
+                    const arrayBuffer = await file.arrayBuffer();
+                    const pdf = await pdfjs.getDocument(arrayBuffer).promise;
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const pageText = await page.getTextContent();
+                        content += pageText.items.map((item: TextItem) => item.str).join(' ');
+                    }
+                } else {
+                    content = await file.text();
                 }
-            } else {
-                content = await file.text();
+                newDocuments.push({ name: file.name, content });
             }
-            setTempDoc({ name: file.name, content });
+            setDocuments(prevDocs => [...prevDocs, ...newDocuments]);
         } catch (err: any) {
             setError(err.message);
         } finally {
             setIsParsing(false);
         }
+         // Reset file input to allow re-uploading the same file
+        event.target.value = '';
     };
     
     const isUiDisabled = isChatLoading || isParsing;
 
-    return (
+  return (
         <div className="grid grid-cols-[3fr_7fr] h-screen bg-slate-50 font-sans">
             <div className="flex-shrink-0 border-r border-slate-200 bg-white p-6 flex flex-col gap-6">
                 <Card>
@@ -101,19 +102,26 @@ export default function Chat() {
                         <CardDescription>AI will remember the file.</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <input type="file" id="file-upload" onChange={handleFileChange} className="hidden" accept=".pdf,.txt,.csv" disabled={isParsing} />
+                        <input type="file" id="file-upload" onChange={handleFileChange} className="hidden" accept=".pdf,.txt,.csv" disabled={isParsing} multiple />
                         <Button onClick={() => document.getElementById('file-upload')?.click()} disabled={isParsing} className="w-full">
                             {isParsing ? 'Parsing...' : 'Upload (PDF, TXT, CSV)'}
                         </Button>
-                        {tempDoc && (
-                          <div className="mt-2 text-sm p-3 bg-green-100 rounded-md truncate" title={tempDoc.name}>
-                            Attached: <strong>{tempDoc.name}</strong>
+                        {documents.length > 0 && (
+                          <div className="mt-2 text-sm space-y-2">
+                            <p className="font-semibold">Attached files:</p>
+                            <ul className="list-disc list-inside">
+                                {documents.map((doc, index) => (
+                                    <li key={index} className="p-1 bg-green-100 rounded-md truncate" title={doc.name}>
+                                        {doc.name}
+                                    </li>
+                                ))}
+                            </ul>
                           </div>
                         )}
                     </CardContent>
                 </Card>
             </div>
-            
+
             <div className="flex flex-col h-screen">
                 <header className="p-4 border-b border-slate-200 bg-white flex justify-between items-center">
                     <h1 className="text-2xl font-bold">LabAssistant AI</h1>
@@ -157,15 +165,15 @@ export default function Chat() {
                             </div>
                         )}
                         <div ref={messagesEndRef} />
-                    </div>
-                </main>
+        </div>
+      </main>
                 <footer className="p-4 border-t border-slate-200 bg-white">
                     <form onSubmit={handleSubmit} className="flex gap-4">
                         <Input value={input} onChange={handleInputChange} placeholder="Ask your technical question..." disabled={isUiDisabled} />
                         <Button type="submit" disabled={isUiDisabled || !input.trim()}>Send</Button>
                     </form>
-                </footer>
+      </footer>
             </div>
-        </div>
-    );
+    </div>
+  );
 }

@@ -1,95 +1,58 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { GoogleGenerativeAIStream, Message, StreamingTextResponse } from 'ai';
-import { supabaseAdmin as supabase } from '@/lib/supabase/server';
+import { supabase } from '@/lib/supabase/client';
 
-// IMPORTANT: Assurez-vous que votre variable d'environnement est bien nommée
-// GEMINI_API_KEY dans votre fichier .env.local
+export const runtime = 'edge';
+
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
-export const runtime = 'nodejs';
-export const maxDuration = 60; // 60 secondes de timeout
-
-// System prompt that defines the AI's role and instructions
-const systemPrompt = `
-You are LabAssistant AI, a helpful and versatile assistant.
-Your goal is to provide the best possible answer to the user.
-To do this, use all the information available to you:
-- The content of any document provided.
-- The history of the conversation.
-- Your own general knowledge.
-
-Adapt your tone and the level of detail to the user's question. Be natural and helpful.
-`;
+const systemPrompt = `You are LabAssistantAI, a helpful AI assistant specialized in Waters LC-MS instruments.
+You are chatting with a lab technician.
+Your goal is to help them troubleshoot their instrument based on the documents provided and your general knowledge.
+Be concise, professional, and accurate.
+If you don't know the answer, say so. Do not invent information.
+When referencing a document, mention it by name.`;
 
 export async function POST(req: Request) {
-  // Log pour débogage
-  console.log('--- New request to /api/chat ---');
-  console.log('Checking environment variables...');
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const geminiKey = process.env.GEMINI_API_KEY;
+    try {
+        const { messages, documents }: { messages: Message[], documents?: { name: string; content: string }[] } = await req.json();
 
-  console.log('Supabase URL available:', !!supabaseUrl);
-  console.log('Supabase Service Key available:', !!serviceKey);
-  console.log('Gemini API Key available:', !!geminiKey);
+        if (!messages || messages.length === 0) {
+            return new Response('No messages provided', { status: 400 });
+        }
+        
+        const lastUserMessage = messages[messages.length - 1];
 
-  if (serviceKey) {
-    console.log('Service Key starts with:', serviceKey.substring(0, 5));
-    console.log('Service Key ends with:', serviceKey.substring(serviceKey.length - 5));
-  }
-   if (geminiKey) {
-    console.log('Gemini Key starts with:', geminiKey.substring(0, 5));
-  }
-  console.log('------------------------------------');
+        let documentContext = '';
+        if (documents && documents.length > 0) {
+            const documentsContent = documents.map(doc => `## Document: ${doc.name}\n\n${doc.content}`).join('\n\n---\n\n');
+            documentContext = `You must base your answer on the following documents. If the user asks a question that is not related to the documents, you should say that you can only answer questions about the provided documents. Here are the documents:\n\n---\n\n${documentsContent}\n\n---\n\n`;
+        }
 
-  const { messages, document } = await req.json();
-  const lastUserMessage = messages[messages.length - 1];
+        const historyForModel = messages.slice(0, -1).map(m => `${m.role}: ${m.content}`).join('\n');
+        
+        const prompt = `${systemPrompt}\n\n${documentContext}## PREVIOUS CONVERSATION HISTORY\n${historyForModel}\n\n## CURRENT USER QUESTION\nuser: ${lastUserMessage.content}\nassistant:`;
 
-  // 1. Récupérer l'historique de la DB
-  const { data: dbMessages, error: msgError } = await supabase.from('messages').select('role, content').order('created_at');
-  if (msgError) {
-    return new Response(`Error fetching history: ${msgError.message}`, { status: 500 });
-  }
-  const historyForModel = dbMessages.map((msg): Message => ({ id: '', role: msg.role as 'user' | 'assistant', content: msg.content }));
+        const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL_NAME! });
+        const stream = await model.generateContentStream(prompt);
 
-  // 2. Construire le contexte du document temporaire, s'il existe
-  let documentContext = '';
-  if (document) {
-    documentContext = `## CONTEXT: A DOCUMENT HAS BEEN PROVIDED ##
---- START OF DOCUMENT: [${document.name}] ---
-${document.content}
---- END OF DOCUMENT ---`;
-  }
+        const aiStream = GoogleGenerativeAIStream(stream, {
+            onStart: async () => {
+                let contentToSave = lastUserMessage.content;
+                if (documents && documents.length > 0) {
+                    contentToSave = `[DOCUMENTS ATTACHED: ${documents.map(doc => doc.name).join(', ')}]\n\n${lastUserMessage.content}`;
+                }
+                await supabase.from('messages').insert({ role: 'user', content: contentToSave });
+            },
+            onCompletion: async (completion) => {
+                await supabase.from('messages').insert({ role: 'assistant', content: completion });
+            }
+        });
 
-  // 3. Construire le prompt final
-  const promptForGemini = `
-${systemPrompt}
+        return new StreamingTextResponse(aiStream);
 
-${documentContext}
-
-## PREVIOUS CONVERSATION HISTORY ##
-${historyForModel.map(m => `${m.role}: ${m.content}`).join('\n')}
-
-## CURRENT USER QUESTION ##
-user: ${lastUserMessage.content}
-assistant:`;
-
-  const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL_NAME! });
-  const stream = await model.generateContentStream(promptForGemini);
-
-  // 4. Stream la réponse et sauvegarder dans la DB
-  const aiStream = GoogleGenerativeAIStream(stream, {
-    onStart: async () => {
-      let contentToSave = lastUserMessage.content;
-      if (document) {
-        contentToSave = `[DOCUMENT ATTACHED: ${document.name}]\n\n${lastUserMessage.content}`;
-      }
-      await supabase.from('messages').insert({ role: 'user', content: contentToSave });
-    },
-    onCompletion: async (completion) => {
-      await supabase.from('messages').insert({ role: 'assistant', content: completion });
-    },
-  });
-
-  return new StreamingTextResponse(aiStream);
+    } catch (error: any) {
+        console.error('Error in /api/chat:', error);
+        return new Response(`Error processing request: ${(error as Error).message}`, { status: 500 });
+    }
 } 
